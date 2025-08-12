@@ -1,0 +1,17 @@
+{
+  "name": "forex-trading-bot-frontend",
+  "version": "1.0.0",
+  "description": "Forex Trading Bot Dashboard with Divergence Detection",
+  "scripts": {
+    "build": "tailwindcss -i ./src/input.css -o ./dist/output.css --watch",
+    "dev": "tailwindcss -i ./src/input.css -o ./dist/output.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.3.6",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  },
+  "dependencies": {
+    "lightweight-charts": "^4.1.3"
+  }
+}
