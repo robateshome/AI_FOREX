@@ -1,0 +1,169 @@
+# Docker Compose for Forex Trading Bot
+# Module 0x06: Docker Deployment Compose Configuration
+# CRC32: PLACEHOLDER_CRC32_06_COMPOSE
+
+version: '3.8'
+
+services:
+  # Backend Container
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: forex-bot-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=sqlite:///app/data/forex_bot.db
+      - API_KEY_FILE=/app/config/api_key.txt
+      - ENCRYPTION_KEY_FILE=/app/config/encryption_key.bin
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./backend:/app/backend
+    networks:
+      - forex-network
+    depends_on:
+      - database
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Container
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: forex-bot-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - forex-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Database Container (Optional - can be SQLite or PostgreSQL)
+  database:
+    image: postgres:15-alpine
+    container_name: forex-bot-database
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=forex_bot
+      - POSTGRES_USER=forex_user
+      - POSTGRES_PASSWORD=forex_password_secure
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - forex-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forex_user -d forex_bot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis Container for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: forex-bot-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_password_secure
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - forex-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Monitoring Container (Optional)
+  monitoring:
+    image: prom/prometheus:latest
+    container_name: forex-bot-monitoring
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - forex-network
+    depends_on:
+      - backend
+      - frontend
+
+  # Grafana Container for visualization (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: forex-bot-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=grafana_password_secure
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - forex-network
+    depends_on:
+      - monitoring
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  forex-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Global configuration
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Environment file
+env_file:
+  - .env

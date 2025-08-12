@@ -1,0 +1,50 @@
+# Dockerfile for Forex Trading Bot Frontend
+# Module 0x06: Docker Deployment Frontend Container
+# CRC32: PLACEHOLDER_CRC32_06_FRONTEND
+
+FROM nginx:alpine
+
+# Install Node.js and npm for building TailwindCSS
+RUN apk add --no-cache nodejs npm
+
+# Set work directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tailwind.config.js ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend source code
+COPY frontend/ ./frontend/
+
+# Build TailwindCSS
+RUN npm run build
+
+# Copy built CSS to nginx
+RUN cp ./dist/output.css /usr/share/nginx/html/
+
+# Copy HTML and JS files
+RUN cp -r ./frontend/* /usr/share/nginx/html/
+
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Create nginx user if it doesn't exist
+RUN adduser -D -s /bin/sh nginx
+
+# Set proper permissions
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chmod -R 755 /usr/share/nginx/html
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
