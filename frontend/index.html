@@ -3,191 +3,462 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forex Trading Bot - Divergence Detection Dashboard</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <title>AI Forex Signal Generator Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'forex-green': '#10B981',
-                        'forex-red': '#EF4444',
-                        'forex-blue': '#3B82F6',
-                        'forex-yellow': '#F59E0B',
-                        'forex-dark': '#1F2937',
-                        'forex-darker': '#111827'
-                    }
-                }
-            }
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
-    </script>
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .signal-buy { color: #10b981; }
+        .signal-sell { color: #ef4444; }
+        .signal-hold { color: #f59e0b; }
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
+<body class="bg-gray-50 min-h-screen">
     <!-- Header -->
-    <header class="bg-forex-darker border-b border-gray-700">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center py-4">
-                <div class="flex items-center">
-                    <h1 class="text-2xl font-bold text-forex-blue">Forex Trading Bot</h1>
-                    <span class="ml-3 px-2 py-1 text-xs bg-forex-green text-white rounded-full">LIVE</span>
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-robot text-3xl"></i>
+                    <div>
+                        <h1 class="text-2xl font-bold">AI Forex Signal Generator</h1>
+                        <p class="text-blue-100">Real-time AI-powered trading signals</p>
+                    </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 bg-forex-green rounded-full animate-pulse"></div>
-                        <span class="text-sm text-gray-300">Connected</span>
+                    <div class="text-right">
+                        <div class="text-sm text-blue-100">Status</div>
+                        <div id="system-status" class="font-semibold">Loading...</div>
                     </div>
-                    <button id="settingsBtn" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-md text-sm">
-                        Settings
-                    </button>
+                    <div class="w-3 h-3 rounded-full bg-green-400 pulse" id="status-indicator"></div>
                 </div>
             </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <!-- API Key Configuration -->
-        <div id="apiKeySection" class="mb-6 p-4 bg-forex-dark rounded-lg border border-gray-700">
-            <h2 class="text-lg font-semibold mb-3">API Configuration</h2>
-            <div class="flex space-x-4">
-                <input type="password" id="apiKeyInput" placeholder="Enter Twelve Data API Key" 
-                       class="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400">
-                <button id="saveApiKeyBtn" class="px-4 py-2 bg-forex-blue hover:bg-blue-600 rounded-md">
-                    Save API Key
-                </button>
-                <button id="testConnectionBtn" class="px-4 py-2 bg-forex-green hover:bg-green-600 rounded-md">
-                    Test Connection
-                </button>
-            </div>
-        </div>
-
-        <!-- Status Overview -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-forex-dark p-4 rounded-lg border border-gray-700">
-                <h3 class="text-sm font-medium text-gray-400">System Status</h3>
-                <p id="systemStatus" class="text-lg font-semibold text-forex-green">Operational</p>
-            </div>
-            <div class="bg-forex-dark p-4 rounded-lg border border-gray-700">
-                <h3 class="text-sm font-medium text-gray-400">Data Source</h3>
-                <p id="dataSource" class="text-lg font-semibold text-forex-blue">Twelve Data</p>
-            </div>
-            <div class="bg-forex-dark p-4 rounded-lg border border-gray-700">
-                <h3 class="text-sm font-medium text-gray-400">Active Signals</h3>
-                <p id="activeSignals" class="text-lg font-semibold text-forex-yellow">0</p>
-            </div>
-            <div class="bg-forex-dark p-4 rounded-lg border border-gray-700">
-                <h3 class="text-sm font-medium text-gray-400">Trade Lock</h3>
-                <p id="tradeLockStatus" class="text-lg font-semibold text-forex-green">Unlocked</p>
-            </div>
-        </div>
-
-        <!-- Chart and Signals Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Main Chart -->
-            <div class="lg:col-span-2 bg-forex-dark rounded-lg border border-gray-700 p-4">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-semibold">Live Chart - EUR/USD</h2>
-                    <div class="flex space-x-2">
-                        <button class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm" data-timeframe="1m">1m</button>
-                        <button class="px-3 py-1 bg-forex-blue rounded text-sm" data-timeframe="5m">5m</button>
-                        <button class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm" data-timeframe="15m">15m</button>
-                        <button class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm" data-timeframe="1h">1h</button>
+    <main class="container mx-auto px-6 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <i class="fas fa-signal text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Total Signals</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="total-signals">0</p>
                     </div>
                 </div>
-                <div id="chartContainer" class="h-96"></div>
             </div>
 
-            <!-- Signals Panel -->
-            <div class="bg-forex-dark rounded-lg border border-gray-700 p-4">
-                <h2 class="text-lg font-semibold mb-4">Recent Signals</h2>
-                <div id="signalsList" class="space-y-3 max-h-96 overflow-y-auto">
-                    <div class="text-center text-gray-500 py-8">
-                        <p>No signals yet</p>
-                        <p class="text-sm">Signals will appear here when detected</p>
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <i class="fas fa-tachometer-alt text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Avg Latency</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="avg-latency">0ms</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                        <i class="fas fa-clock text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Uptime</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="uptime">0s</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                        <i class="fas fa-chart-line text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Signals/Hour</p>
+                        <p class="text-2xl font-semibold text-gray-900" id="signals-per-hour">0</p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Divergence Detection and Alerts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <!-- Divergence Detection -->
-            <div class="bg-forex-dark rounded-lg border border-gray-700 p-4">
-                <h2 class="text-lg font-semibold mb-4">Divergence Detection</h2>
-                <div id="divergenceList" class="space-y-3 max-h-64 overflow-y-auto">
-                    <div class="text-center text-gray-500 py-8">
-                        <p>No divergences detected</p>
-                        <p class="text-sm">Monitoring for bullish/bearish divergences</p>
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Recent Signals -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-gray-900">
+                            <i class="fas fa-chart-bar text-blue-600 mr-2"></i>
+                            Recent Trading Signals
+                        </h2>
+                        <button onclick="refreshSignals()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                    </div>
+                    <div id="signals-container" class="space-y-4">
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-chart-line text-4xl mb-4"></i>
+                            <p>No signals generated yet</p>
+                            <p class="text-sm">The AI model is collecting data and will generate signals soon</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- System Alerts -->
-            <div class="bg-forex-dark rounded-lg border border-gray-700 p-4">
-                <h2 class="text-lg font-semibold mb-4">System Alerts</h2>
-                <div id="alertsList" class="space-y-3 max-h-64 overflow-y-auto">
-                    <div class="text-center text-gray-500 py-8">
-                        <p>No alerts</p>
-                        <p class="text-sm">System is running normally</p>
+            <!-- Performance Metrics -->
+            <div class="space-y-6">
+                <!-- Model Performance -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-brain text-purple-600 mr-2"></i>
+                        Model Performance
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Accuracy</span>
+                            <span class="font-semibold" id="model-accuracy">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Sharpe Ratio</span>
+                            <span class="font-semibold" id="sharpe-ratio">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Win Rate</span>
+                            <span class="font-semibold" id="win-rate">--</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Max Drawdown</span>
+                            <span class="font-semibold" id="max-drawdown">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Data -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-globe text-green-600 mr-2"></i>
+                        Market Data
+                    </h3>
+                    <div id="market-data" class="space-y-3">
+                        <div class="text-center text-gray-500 py-4">
+                            <i class="fas fa-spinner fa-spin text-xl"></i>
+                            <p class="mt-2">Loading market data...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                        <i class="fas fa-cogs text-orange-600 mr-2"></i>
+                        Quick Actions
+                    </h3>
+                    <div class="space-y-3">
+                        <button onclick="retrainModel()" class="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-sync mr-2"></i>Retrain Model
+                        </button>
+                        <button onclick="refreshAll()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+                            <i class="fas fa-redo mr-2"></i>Refresh All
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Connection Status -->
-        <div class="mt-6 bg-forex-dark rounded-lg border border-gray-700 p-4">
-            <h2 class="text-lg font-semibold mb-4">Connection Status</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="flex items-center space-x-3">
-                    <div id="twelveDataStatus" class="w-3 h-3 bg-forex-green rounded-full"></div>
-                    <span class="text-sm">Twelve Data API</span>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <div id="restStatus" class="w-3 h-3 bg-gray-500 rounded-full"></div>
-                    <span class="text-sm">REST Fallback</span>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <div id="websocketStatus" class="w-3 h-3 bg-forex-green rounded-full"></div>
-                    <span class="text-sm">WebSocket</span>
-                </div>
+        <!-- Performance Chart -->
+        <div class="mt-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-chart-area text-indigo-600 mr-2"></i>
+                    Signal Performance Over Time
+                </h3>
+                <canvas id="performanceChart" width="400" height="100"></canvas>
             </div>
         </div>
     </main>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-forex-dark rounded-lg p-6 w-full max-w-md mx-4">
-            <h2 class="text-xl font-semibold mb-4">Settings</h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium mb-2">Confidence Threshold</label>
-                    <input type="range" id="confidenceThreshold" min="0.5" max="0.95" step="0.05" value="0.7" 
-                           class="w-full">
-                    <span id="confidenceValue" class="text-sm text-gray-400">0.7</span>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Update Interval (seconds)</label>
-                    <input type="number" id="updateInterval" min="1" max="60" value="1" 
-                           class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white">
-                </div>
-                <div class="flex items-center">
-                    <input type="checkbox" id="autoExecution" class="mr-2">
-                    <label class="text-sm">Auto-execute signals</label>
-                </div>
-            </div>
-            <div class="flex justify-end space-x-3 mt-6">
-                <button id="closeSettingsBtn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md">
-                    Close
-                </button>
-                <button id="saveSettingsBtn" class="px-4 py-2 bg-forex-blue hover:bg-blue-600 rounded-md">
-                    Save
-                </button>
-            </div>
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-6 text-center">
+            <p>&copy; 2025 AI Forex Signal Generator. Built with ❤️ for the trading community.</p>
         </div>
-    </div>
+    </footer>
 
-    <!-- Scripts -->
-    <script src="js/dashboard.js"></script>
+    <script>
+        // Configuration
+        const API_BASE = 'http://localhost:8000';
+        let performanceChart = null;
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            setInterval(updateDashboard, 5000); // Update every 5 seconds
+        });
+
+        async function initializeDashboard() {
+            await updateDashboard();
+            initializePerformanceChart();
+        }
+
+        async function updateDashboard() {
+            try {
+                // Update system status
+                await updateSystemStatus();
+                
+                // Update signals
+                await updateSignals();
+                
+                // Update performance metrics
+                await updatePerformanceMetrics();
+                
+                // Update market data
+                await updateMarketData();
+                
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+                showError('Failed to update dashboard');
+            }
+        }
+
+        async function updateSystemStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                const statusElement = document.getElementById('system-status');
+                const indicator = document.getElementById('status-indicator');
+                
+                if (data.status === 'healthy') {
+                    statusElement.textContent = 'Operational';
+                    statusElement.className = 'font-semibold text-green-400';
+                    indicator.className = 'w-3 h-3 rounded-full bg-green-400 pulse';
+                } else {
+                    statusElement.textContent = 'Error';
+                    statusElement.className = 'font-semibold text-red-400';
+                    indicator.className = 'w-3 h-3 rounded-full bg-red-400 pulse';
+                }
+            } catch (error) {
+                console.error('Error updating system status:', error);
+            }
+        }
+
+        async function updateSignals() {
+            try {
+                const response = await fetch(`${API_BASE}/api/ai/signals?limit=10`);
+                const data = await response.json();
+                
+                const container = document.getElementById('signals-container');
+                
+                if (data.signals && data.signals.length > 0) {
+                    container.innerHTML = data.signals.map(signal => createSignalCard(signal)).join('');
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-chart-line text-4xl mb-4"></i>
+                            <p>No signals generated yet</p>
+                            <p class="text-sm">The AI model is collecting data and will generate signals soon</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error updating signals:', error);
+            }
+        }
+
+        function createSignalCard(signal) {
+            const actionClass = signal.action === 'buy' ? 'signal-buy' : 
+                              signal.action === 'sell' ? 'signal-sell' : 'signal-hold';
+            const actionIcon = signal.action === 'buy' ? 'fa-arrow-up' : 
+                             signal.action === 'sell' ? 'fa-arrow-down' : 'fa-minus';
+            
+            return `
+                <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="p-2 rounded-full bg-gray-100">
+                                <i class="fas ${actionIcon} ${actionClass} text-lg"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">${signal.symbol}</div>
+                                <div class="text-sm text-gray-500">${new Date(signal.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-lg ${actionClass}">${signal.action.toUpperCase()}</div>
+                            <div class="text-sm text-gray-600">$${parseFloat(signal.price).toFixed(5)}</div>
+                            <div class="text-xs text-gray-500">${(signal.confidence * 100).toFixed(1)}% confidence</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function updatePerformanceMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/api/ai/performance`);
+                const data = await response.json();
+                
+                if (data.pipeline_metrics) {
+                    const metrics = data.pipeline_metrics;
+                    
+                    document.getElementById('total-signals').textContent = metrics.total_signals || 0;
+                    document.getElementById('avg-latency').textContent = `${(metrics.avg_latency_ms || 0).toFixed(1)}ms`;
+                    document.getElementById('signals-per-hour').textContent = metrics.signals_per_hour || 0;
+                    
+                    // Update uptime
+                    const uptime = metrics.uptime_seconds || 0;
+                    const hours = Math.floor(uptime / 3600);
+                    const minutes = Math.floor((uptime % 3600) / 60);
+                    const seconds = Math.floor(uptime % 60);
+                    document.getElementById('uptime').textContent = `${hours}h ${minutes}m ${seconds}s`;
+                }
+                
+                if (data.model_performance && data.model_performance.backtest_results) {
+                    const perf = data.model_performance.backtest_results;
+                    
+                    document.getElementById('model-accuracy').textContent = perf.accuracy ? `${(perf.accuracy * 100).toFixed(1)}%` : '--';
+                    document.getElementById('sharpe-ratio').textContent = perf.sharpe_ratio ? perf.sharpe_ratio.toFixed(3) : '--';
+                    document.getElementById('win-rate').textContent = perf.win_rate ? `${(perf.win_rate * 100).toFixed(1)}%` : '--';
+                    document.getElementById('max-drawdown').textContent = perf.max_drawdown ? `${(perf.max_drawdown * 100).toFixed(1)}%` : '--';
+                }
+                
+            } catch (error) {
+                console.error('Error updating performance metrics:', error);
+            }
+        }
+
+        async function updateMarketData() {
+            try {
+                const response = await fetch(`${API_BASE}/api/ai/market-data`);
+                const data = await response.json();
+                
+                const container = document.getElementById('market-data');
+                
+                if (data.market_data && Object.keys(data.market_data).length > 0) {
+                    container.innerHTML = Object.entries(data.market_data).map(([symbol, info]) => `
+                        <div class="border-b pb-2 last:border-b-0">
+                            <div class="flex justify-between items-center">
+                                <span class="font-medium">${symbol}</span>
+                                <span class="font-bold">$${parseFloat(info.last_price).toFixed(5)}</span>
+                            </div>
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>1h: ${info.price_change_1h ? (info.price_change_1h > 0 ? '+' : '') + info.price_change_1h.toFixed(3) + '%' : '--'}</span>
+                                <span>24h: ${info.price_change_24h ? (info.price_change_24h > 0 ? '+' : '') + info.price_change_24h.toFixed(3) + '%' : '--'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-4">
+                            <i class="fas fa-spinner fa-spin text-xl"></i>
+                            <p class="mt-2">Loading market data...</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error updating market data:', error);
+            }
+        }
+
+        function initializePerformanceChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Signal Performance',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function retrainModel() {
+            try {
+                const button = event.target;
+                const originalText = button.innerHTML;
+                
+                button.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Retraining...';
+                button.disabled = true;
+                
+                const response = await fetch(`${API_BASE}/api/ai/retrain`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    showSuccess('Model retraining started successfully');
+                } else {
+                    showError('Model retraining failed: ' + data.message);
+                }
+                
+            } catch (error) {
+                console.error('Error retraining model:', error);
+                showError('Failed to retrain model');
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+
+        function refreshSignals() {
+            updateSignals();
+        }
+
+        function refreshAll() {
+            updateDashboard();
+        }
+
+        function showSuccess(message) {
+            // Simple success notification
+            alert('Success: ' + message);
+        }
+
+        function showError(message) {
+            // Simple error notification
+            alert('Error: ' + message);
+        }
+    </script>
 </body>
 </html>
