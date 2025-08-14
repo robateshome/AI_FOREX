@@ -46,8 +46,14 @@ class TwelveDataClient:
         
     async def __aenter__(self):
         """Async context manager entry"""
-        self.session = aiohttp.ClientSession()
+        if not self.session:
+            self.session = aiohttp.ClientSession()
         return self
+    
+    async def _ensure_session(self):
+        """Ensure session is initialized"""
+        if not self.session:
+            self.session = aiohttp.ClientSession()
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
@@ -91,6 +97,8 @@ class TwelveDataClient:
     ) -> pd.DataFrame:
         """Fetch historical OHLCV data"""
         try:
+            await self._ensure_session()
+            
             if not self._check_rate_limit():
                 logger.warning("Rate limit exceeded, waiting...")
                 await asyncio.sleep(1)
@@ -111,7 +119,14 @@ class TwelveDataClient:
                 if response.status == 200:
                     data = await response.json()
                     
-                    if data.get('status') == 'ok':
+                    # Check if response contains error information
+                    if 'status' in data and data.get('status') != 'ok':
+                        error_msg = data.get('message', 'Unknown error')
+                        logger.error(f"API error: {error_msg}")
+                        raise Exception(f"Twelve Data API error: {error_msg}")
+                    
+                    # If no status field or status is ok, process the data
+                    if 'values' in data:
                         # Convert to DataFrame
                         df = pd.DataFrame(data['values'])
                         
@@ -127,10 +142,13 @@ class TwelveDataClient:
                         
                         df = df.rename(columns=column_mapping)
                         
-                        # Convert data types
-                        numeric_columns = ['open', 'high', 'low', 'close', 'volume']
+                        # Convert data types - Forex data doesn't have volume
+                        numeric_columns = ['open', 'high', 'low', 'close']
                         for col in numeric_columns:
                             df[col] = pd.to_numeric(df[col], errors='coerce')
+                        
+                        # Add volume column with default value for Forex
+                        df['volume'] = 1000000  # Default volume for Forex
                         
                         # Convert timestamp
                         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -146,11 +164,9 @@ class TwelveDataClient:
                         
                         logger.info(f"Fetched {len(df)} historical records for {symbol}")
                         return df
-                    
                     else:
-                        error_msg = data.get('message', 'Unknown error')
-                        logger.error(f"API error: {error_msg}")
-                        raise Exception(f"Twelve Data API error: {error_msg}")
+                        logger.error(f"Unexpected data format: {data}")
+                        raise Exception("Unexpected data format from API")
                 
                 else:
                     logger.error(f"HTTP error {response.status}: {await response.text()}")
@@ -163,6 +179,8 @@ class TwelveDataClient:
     async def get_real_time_quote(self, symbol: str) -> Dict[str, Any]:
         """Get real-time quote for a symbol"""
         try:
+            await self._ensure_session()
+            
             if not self._check_rate_limit():
                 logger.warning("Rate limit exceeded, waiting...")
                 await asyncio.sleep(1)
@@ -180,12 +198,14 @@ class TwelveDataClient:
                 if response.status == 200:
                     data = await response.json()
                     
-                    if data.get('status') == 'ok':
-                        return data
-                    else:
+                    # Check if response contains error information
+                    if 'status' in data and data.get('status') != 'ok':
                         error_msg = data.get('message', 'Unknown error')
                         logger.error(f"API error: {error_msg}")
                         raise Exception(f"Twelve Data API error: {error_msg}")
+                    
+                    # If no status field or status is ok, return the data
+                    return data
                 
                 else:
                     logger.error(f"HTTP error {response.status}: {await response.text()}")
