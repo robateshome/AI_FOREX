@@ -20,6 +20,7 @@ from modules.divergence_detector import DivergenceDetector
 from modules.signal_engine import SignalEngine
 from modules.integrity_validation import IntegrityValidator
 from modules.failsafe_execution import FailsafeManager
+from modules.signal_pipeline import RealTimeSignalPipeline
 
 # Load environment variables
 load_dotenv()
@@ -37,13 +38,14 @@ divergence_detector = None
 signal_engine = None
 integrity_validator = None
 failsafe_manager = None
+ai_signal_pipeline = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global data_feed_manager, divergence_detector, signal_engine, integrity_validator, failsafe_manager
+    global data_feed_manager, divergence_detector, signal_engine, integrity_validator, failsafe_manager, ai_signal_pipeline
     
-    logger.info("Starting Forex Trading Bot...")
+    logger.info("Starting AI Forex Signal Generator...")
     
     # Initialize all modules
     try:
@@ -62,12 +64,17 @@ async def lifespan(app: FastAPI):
         # Initialize failsafe manager
         failsafe_manager = FailsafeManager()
         
+        # Initialize AI signal pipeline
+        ai_signal_pipeline = RealTimeSignalPipeline(symbols=["EUR/USD"], update_interval=1.0)
+        await ai_signal_pipeline.initialize()
+        
         # Start all services
         await asyncio.gather(
             data_feed_manager.start(),
             divergence_detector.start(),
             signal_engine.start(),
-            failsafe_manager.start()
+            failsafe_manager.start(),
+            ai_signal_pipeline.start()
         )
         
         logger.info("All modules started successfully")
@@ -79,13 +86,14 @@ async def lifespan(app: FastAPI):
     yield
     
     # Cleanup
-    logger.info("Shutting down Forex Trading Bot...")
+    logger.info("Shutting down AI Forex Signal Generator...")
     try:
         await asyncio.gather(
             data_feed_manager.stop(),
             divergence_detector.stop(),
             signal_engine.stop(),
-            failsafe_manager.stop()
+            failsafe_manager.stop(),
+            ai_signal_pipeline.stop()
         )
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
@@ -160,7 +168,59 @@ async def get_status():
         "system_status": "operational",
         "data_sources": data_feed_manager.get_status() if data_feed_manager else {},
         "signals": signal_engine.get_recent_signals() if signal_engine else [],
-        "divergences": divergence_detector.get_recent_divergences() if divergence_detector else []
+        "divergences": divergence_detector.get_recent_divergences() if divergence_detector else [],
+        "ai_pipeline": ai_signal_pipeline.get_pipeline_metrics().__dict__ if ai_signal_pipeline else {}
+    }
+
+@app.get("/api/ai/signals")
+async def get_ai_signals(limit: int = 10):
+    """Get recent AI-generated trading signals"""
+    if not ai_signal_pipeline:
+        return {"error": "AI pipeline not initialized"}
+    
+    signals = ai_signal_pipeline.get_recent_signals(limit=limit)
+    return {
+        "signals": signals,
+        "total_count": len(signals),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@app.get("/api/ai/performance")
+async def get_ai_performance():
+    """Get AI model performance metrics"""
+    if not ai_signal_pipeline:
+        return {"error": "AI pipeline not initialized"}
+    
+    metrics = ai_signal_pipeline.get_pipeline_metrics()
+    return {
+        "pipeline_metrics": metrics.__dict__,
+        "model_performance": ai_signal_pipeline.ai_generator.get_performance_summary() if ai_signal_pipeline.ai_generator else {},
+        "market_summary": ai_signal_pipeline.get_market_data_summary()
+    }
+
+@app.post("/api/ai/retrain")
+async def retrain_ai_model():
+    """Retrain the AI model with latest data"""
+    if not ai_signal_pipeline:
+        return {"error": "AI pipeline not initialized"}
+    
+    try:
+        await ai_signal_pipeline.retrain_model()
+        return {"status": "success", "message": "Model retraining completed"}
+    except Exception as e:
+        logger.error(f"Model retraining failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/ai/market-data")
+async def get_market_data_summary():
+    """Get current market data summary"""
+    if not ai_signal_pipeline:
+        return {"error": "AI pipeline not initialized"}
+    
+    summary = ai_signal_pipeline.get_market_data_summary()
+    return {
+        "market_data": summary,
+        "timestamp": datetime.utcnow().isoformat()
     }
 
 @app.websocket("/ws")

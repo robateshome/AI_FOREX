@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  ai-forex-signals:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: ai-forex-signals
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - TWELVE_DATA_API_KEY=${TWELVE_DATA_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      - redis
+    networks:
+      - ai-forex-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-forex-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-forex-network
+    command: redis-server --appendonly yes
+
+  nginx:
+    image: nginx:alpine
+    container_name: ai-forex-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - ai-forex-signals
+    networks:
+      - ai-forex-network
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  ai-forex-network:
+    driver: bridge
